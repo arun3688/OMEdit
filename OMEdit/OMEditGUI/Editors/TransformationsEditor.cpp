@@ -62,6 +62,15 @@ void TransformationsEditor::showContextMenu(QPoint point)
   delete pMenu;
 }
 
+/*!
+ * \brief TransformationsEditor::popupcompleter()
+ * \we do not have completer for this
+ */
+void TransformationsEditor::popupcompleter()
+{
+
+}
+
 //! Slot activated when TSourceEditor's QTextDocument contentsChanged SIGNAL is raised.
 void TransformationsEditor::contentsHasChanged(int position, int charsRemoved, int charsAdded)
 {

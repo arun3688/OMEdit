@@ -59,6 +59,15 @@ void CEditor::setPlainText(const QString &text)
 }
 
 /*!
+ * \brief CEditor::popupcompleter()
+ * \we do not have completer for this
+ */
+void CEditor::popupcompleter()
+{
+
+}
+
+/*!
  * \brief CEditor::showContextMenu
  * Create a context menu.
  * \param point

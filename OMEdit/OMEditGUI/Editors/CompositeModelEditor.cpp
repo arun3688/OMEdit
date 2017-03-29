@@ -162,6 +162,16 @@ QString CompositeModelEditor::getParameterValue(QString subModelName, QString pa
   return "";      //Should never happen
 }
 
+/*!
+ * \brief CompositeModelEditor::popupcompleter()
+ * \we do not have completer for this
+ */
+void CompositeModelEditor::popupcompleter()
+{
+
+}
+
+
 void CompositeModelEditor::setParameterValue(QString subModelName, QString parameterName, QString value)
 {
   QDomNodeList subModelList = mXmlDocument.elementsByTagName("SubModel");

@@ -36,6 +36,7 @@
 #include "Options/OptionsDialog.h"
 
 #include <QMenu>
+#include <QCompleter>
 
 MetaModelicaEditor::MetaModelicaEditor(QWidget *pParent)
   : BaseEditor(pParent)
@@ -62,6 +63,18 @@ void MetaModelicaEditor::setPlainText(const QString &text)
 }
 
 /*!
+ * \brief MetaModelicaEditor::popupcompleter()
+ * show the popup for keywords autocompletion
+ */
+void MetaModelicaEditor::popupcompleter()
+{
+   QCompleter *c = mpPlainTextEdit->completer();
+   QRect cr = mpPlainTextEdit->cursorRect();
+   cr.setWidth(c->popup()->sizeHintForColumn(0)+ c->popup()->verticalScrollBar()->sizeHint().width());
+   c->complete(cr);
+}
+
+/*!
  * \brief MetaModelicaEditor::showContextMenu
  * Create a context menu.
  * \param point
@@ -80,6 +93,7 @@ void MetaModelicaEditor::showContextMenu(QPoint point)
 
 void MetaModelicaEditor::contentsHasChanged(int position, int charsRemoved, int charsAdded)
 {
+
   Q_UNUSED(position);
   if (mpModelWidget && mpModelWidget->isVisible()) {
     if (charsRemoved == 0 && charsAdded == 0) {
@@ -143,109 +157,120 @@ void MetaModelicaHighlighter::initializeSettings()
   rule.mFormat = mTextFormat;
   mHighlightingRules.append(rule);
   // keywords
-  QStringList keywordPatterns;
-  keywordPatterns << "\\balgorithm\\b"
-                  << "\\band\\b"
-                  << "\\bannotation\\b"
-                  << "\\bassert\\b"
-                  << "\\bblock\\b"
-                  << "\\bbreak\\b"
-                  << "\\bBoolean\\b"
-                  << "\\bclass\\b"
-                  << "\\bconnect\\b"
-                  << "\\bconnector\\b"
-                  << "\\bconstant\\b"
-                  << "\\bconstrainedby\\b"
-                  << "\\bder\\b"
-                  << "\\bdiscrete\\b"
-                  << "\\beach\\b"
-                  << "\\belse\\b"
-                  << "\\belseif\\b"
-                  << "\\belsewhen\\b"
-                  << "\\bencapsulated\\b"
-                  << "\\bend\\b"
-                  << "\\benumeration\\b"
-                  << "\\bequation\\b"
-                  << "\\bexpandable\\b"
-                  << "\\bextends\\b"
-                  << "\\bexternal\\b"
-                  << "\\bfalse\\b"
-                  << "\\bfinal\\b"
-                  << "\\bflow\\b"
-                  << "\\bfor\\b"
-                  << "\\bfunction\\b"
-                  << "\\bif\\b"
-                  << "\\bimport\\b"
-                  << "\\bimpure\\b"
-                  << "\\bin\\b"
-                  << "\\binitial\\b"
-                  << "\\binner\\b"
-                  << "\\binput\\b"
-                  << "\\bloop\\b"
-                  << "\\bmodel\\b"
-                  << "\\bnot\\b"
-                  << "\\boperator\\b"
-                  << "\\bor\\b"
-                  << "\\bouter\\b"
-                  << "\\boutput\\b"
-                  << "\\boptimization\\b"
-                  << "\\bpackage\\b"
-                  << "\\bparameter\\b"
-                  << "\\bpartial\\b"
-                  << "\\bprotected\\b"
-                  << "\\bpublic\\b"
-                  << "\\bpure\\b"
-                  << "\\brecord\\b"
-                  << "\\bredeclare\\b"
-                  << "\\breplaceable\\b"
-                  << "\\breturn\\b"
-                  << "\\bstream\\b"
-                  << "\\bthen\\b"
-                  << "\\btrue\\b"
-                  << "\\btype\\b"
-                  << "\\bwhen\\b"
-                  << "\\bwhile\\b"
-                  << "\\bwithin\\b"
-                  /* MetaModelica specific keywords */
-                  << "\\bas\\b"
-                  << "\\bcase\\b"
-                  << "\\bcontinue\\b"
-                  << "\\bequality\\b"
-                  << "\\bfailure\\b"
-                  << "\\bguard\\b"
-                  << "\\blocal\\b"
-                  << "\\bmatch\\b"
-                  << "\\bmatchcontinue\\b"
-                  << "\\buniontype\\b"
-                  << "\\bsubtypeof\\b"
-                  << "\\btry\\b"
-                  << "\\bparfor\\b"
-                  << "\\bparallel\\b"
-                  << "\\bparlocal\\b"
-                  << "\\bparglobal\\b"
-                  << "\\bparkernel\\b"
-                  << "\\bthreaded\\b";
+  QStringList keywordPatterns=getKeywords();
   foreach (const QString &pattern, keywordPatterns) {
     rule.mPattern = QRegExp(pattern);
     rule.mFormat = mKeywordFormat;
     mHighlightingRules.append(rule);
   }
   // Modelica types
-  QStringList typePatterns;
-  typePatterns << "\\bString\\b"
-               << "\\bInteger\\b"
-               << "\\bBoolean\\b"
-               << "\\bReal\\b"
-               << "\\bOption\\b"
-               << "\\bSOME\\b"
-               << "\\bNONE\\b"
-               << "\\blist\\b"
-               << "\\barray\\b";
+  QStringList typePatterns=getTypes();
   foreach (const QString &pattern, typePatterns) {
     rule.mPattern = QRegExp(pattern);
     rule.mFormat = mTypeFormat;
     mHighlightingRules.append(rule);
   }
+}
+
+QStringList MetaModelicaHighlighter::getTypes()
+{
+    QStringList typeslist;
+    typeslist    << "\\bString\\b"
+                 << "\\bInteger\\b"
+                 << "\\bBoolean\\b"
+                 << "\\bReal\\b"
+                 << "\\bOption\\b"
+                 << "\\bSOME\\b"
+                 << "\\bNONE\\b"
+                 << "\\blist\\b"
+                 << "\\barray\\b";
+    return typeslist;
+}
+
+QStringList MetaModelicaHighlighter::getKeywords()
+{
+    QStringList keywordslist;
+    keywordslist    << "\\balgorithm\\b"
+                    << "\\band\\b"
+                    << "\\bannotation\\b"
+                    << "\\bassert\\b"
+                    << "\\bblock\\b"
+                    << "\\bbreak\\b"
+                    << "\\bclass\\b"
+                    << "\\bconnect\\b"
+                    << "\\bconnector\\b"
+                    << "\\bconstant\\b"
+                    << "\\bconstrainedby\\b"
+                    << "\\bder\\b"
+                    << "\\bdiscrete\\b"
+                    << "\\beach\\b"
+                    << "\\belse\\b"
+                    << "\\belseif\\b"
+                    << "\\belsewhen\\b"
+                    << "\\bencapsulated\\b"
+                    << "\\bend\\b"
+                    << "\\benumeration\\b"
+                    << "\\bequation\\b"
+                    << "\\bexpandable\\b"
+                    << "\\bextends\\b"
+                    << "\\bexternal\\b"
+                    << "\\bfalse\\b"
+                    << "\\bfinal\\b"
+                    << "\\bflow\\b"
+                    << "\\bfor\\b"
+                    << "\\bfunction\\b"
+                    << "\\bif\\b"
+                    << "\\bimport\\b"
+                    << "\\bimpure\\b"
+                    << "\\bin\\b"
+                    << "\\binitial\\b"
+                    << "\\binner\\b"
+                    << "\\binput\\b"
+                    << "\\bloop\\b"
+                    << "\\bmodel\\b"
+                    << "\\bnot\\b"
+                    << "\\boperator\\b"
+                    << "\\bor\\b"
+                    << "\\bouter\\b"
+                    << "\\boutput\\b"
+                    << "\\boptimization\\b"
+                    << "\\bpackage\\b"
+                    << "\\bparameter\\b"
+                    << "\\bpartial\\b"
+                    << "\\bprotected\\b"
+                    << "\\bpublic\\b"
+                    << "\\bpure\\b"
+                    << "\\brecord\\b"
+                    << "\\bredeclare\\b"
+                    << "\\breplaceable\\b"
+                    << "\\breturn\\b"
+                    << "\\bstream\\b"
+                    << "\\bthen\\b"
+                    << "\\btrue\\b"
+                    << "\\btype\\b"
+                    << "\\bwhen\\b"
+                    << "\\bwhile\\b"
+                    << "\\bwithin\\b"
+                    /* MetaModelica specific keywords */
+                    << "\\bas\\b"
+                    << "\\bcase\\b"
+                    << "\\bcontinue\\b"
+                    << "\\bequality\\b"
+                    << "\\bfailure\\b"
+                    << "\\bguard\\b"
+                    << "\\blocal\\b"
+                    << "\\bmatch\\b"
+                    << "\\bmatchcontinue\\b"
+                    << "\\buniontype\\b"
+                    << "\\bsubtypeof\\b"
+                    << "\\btry\\b"
+                    << "\\bparfor\\b"
+                    << "\\bparallel\\b"
+                    << "\\bparlocal\\b"
+                    << "\\bparglobal\\b"
+                    << "\\bparkernel\\b"
+                    << "\\bthreaded\\b";
+    return keywordslist;
 }
 
 /*!

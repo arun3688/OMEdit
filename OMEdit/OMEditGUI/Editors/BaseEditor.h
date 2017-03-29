@@ -210,6 +210,7 @@ public:
 };
 
 class BaseEditor;
+class QCompleter;
 class PlainTextEdit : public QPlainTextEdit
 {
   Q_OBJECT
@@ -222,13 +223,14 @@ public:
   void lineNumberAreaPaintEvent(QPaintEvent *event);
   void lineNumberAreaMouseEvent(QMouseEvent *event);
   void goToLineNumber(int lineNumber);
+  QCompleter *completer();
 private:
+  QCompleter *c;
   BaseEditor *mpBaseEditor;
   LineNumberArea *mpLineNumberArea;
   bool mCanHaveBreakpoints;
   QTextCharFormat mParenthesesMatchFormat;
   QTextCharFormat mParenthesesMisMatchFormat;
-
   void highlightCurrentLine();
   void highlightParentheses();
   void setLineWrapping();
@@ -241,6 +243,9 @@ private:
   void foldOrUnfold(bool unFold);
   void handleHomeKey(bool keepAnchor);
   void toggleBlockVisible(const QTextBlock &block);
+  QString textUnderCursor() const;
+private slots:
+  void insertCompletion(const QString &completion);
 public slots:
   void updateLineNumberAreaWidth(int newBlockCount);
   void updateLineNumberArea(const QRect &rect, int dy);
@@ -278,6 +283,7 @@ public:
   QAction* getUnFoldAllAction() {return mpUnFoldAllAction;}
   DocumentMarker* getDocumentMarker() {return mpDocumentMarker;}
   void setForceSetPlainText(bool forceSetPlainText) {mForceSetPlainText = forceSetPlainText;}
+  virtual void popupcompleter()=0;
 private:
   void initialize();
   void createActions();

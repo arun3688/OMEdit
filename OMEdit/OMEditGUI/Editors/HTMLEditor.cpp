@@ -62,6 +62,15 @@ void HTMLEditor::showContextMenu(QPoint point)
   delete pMenu;
 }
 
+/*!
+ * \brief HTMLEditor::popupcompleter()
+ * \we do not have completer for this
+ */
+void HTMLEditor::popupcompleter()
+{
+
+}
+
 void HTMLEditor::contentsHasChanged(int position, int charsRemoved, int charsAdded)
 {
   Q_UNUSED(position);

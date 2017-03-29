@@ -75,6 +75,15 @@ void TextEditor::showContextMenu(QPoint point)
 }
 
 /*!
+ * \brief TextEditor::popupcompleter()
+ * \we do not have completer for this
+ */
+void TextEditor::popupcompleter()
+{
+
+}
+
+/*!
  * \brief TextEditor::contentsHasChanged
  * Slot activated when TextEditor's QTextDocument contentsChanged SIGNAL is raised.
  * Sets the model as modified so that user knows that his current model is not saved.

@@ -37,7 +37,7 @@
 #include "Modeling/ModelWidgetContainer.h"
 #include "Util/Helper.h"
 #include "Debugger/Breakpoints/BreakpointsWidget.h"
-
+#include "qdebug.h"
 #include <QMenu>
 #include <QCompleter>
 #include <QMessageBox>
@@ -658,7 +658,7 @@ static int foldBoxWidth(const QFontMetrics &fm)
  * Internal QPlainTextEdit for Editor.
  */
 PlainTextEdit::PlainTextEdit(BaseEditor *pBaseEditor)
-  : QPlainTextEdit(pBaseEditor), mpBaseEditor(pBaseEditor)
+  : QPlainTextEdit(pBaseEditor),c(0), mpBaseEditor(pBaseEditor)
 {
   setObjectName("BaseEditor");
   QTextDocument *pTextDocument = document();
@@ -672,7 +672,40 @@ PlainTextEdit::PlainTextEdit(BaseEditor *pBaseEditor)
   // parentheses matcher
   mParenthesesMatchFormat = Utilities::getParenthesesMatchFormat();
   mParenthesesMisMatchFormat = Utilities::getParenthesesMisMatchFormat();
+  // get keywords and types list from the MetaModelicaEditor
+  MetaModelicaHighlighter * mpMetaModelicaHighlighter= dynamic_cast<MetaModelicaHighlighter*>(mpBaseEditor);
+  QStringList keywords = mpMetaModelicaHighlighter->getKeywords();
+  QStringList types =  mpMetaModelicaHighlighter->getTypes();
+  // initialize the QStandardItemModel model
+  QStandardItemModel* model = new QStandardItemModel();
+  QStandardItem* item = new QStandardItem();
+  // keywords
+  for (int i = 0; i < keywords.size(); ++i)
+   {
+    item =new QStandardItem(keywords[i].remove("\\b"));
+    //item->setIcon(QIcon(":/Resources/icons/perspective0.svg"));
+    item->setToolTip("keywords");
+    model->setItem(i, 0, item);
+   }
+  // types
+  for (int k = 0; k < types.size(); ++k)
+       {
+    item =new QStandardItem(types[k].remove("\\b"));
+    //item->setIcon(QIcon(":/Resources/icons/perspective1.svg"));
+    item->setToolTip("types");
+    model->appendRow(item);
+  }
+  //To do adapt natural sorting algorithm to the completor
+  //model->sort(0,Qt::SortOrder::AscendingOrder);
 
+  // initialize the completer
+  c = new QCompleter(this);
+  c->setModel(model);
+  c->setCaseSensitivity(Qt::CaseSensitive);
+  c->setWrapAround(false);
+  c->setWidget(this);
+  c->setCompletionMode(QCompleter::PopupCompletion);
+  connect(c, SIGNAL(activated(QString)), this, SLOT(insertCompletion(QString)));
   updateLineNumberAreaWidth(0);
   updateHighlights();
   updateCursorPosition();
@@ -1390,6 +1423,33 @@ void PlainTextEdit::resizeEvent(QResizeEvent *pEvent)
   mpLineNumberArea->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
 }
 
+
+QCompleter *PlainTextEdit::completer()
+{
+    return c;
+}
+
+/* insert the keywords from the completer popup */
+void PlainTextEdit::insertCompletion(const QString& completion)
+{
+    if (c->widget() != this)
+        return;
+    QTextCursor tc = textCursor();
+    int extra = completion.length() - c->completionPrefix().length();
+    //tc.movePosition(QTextCursor::Left);
+    tc.movePosition(QTextCursor::EndOfWord);
+    tc.insertText(completion.right(extra));
+    setTextCursor(tc);
+}
+
+QString PlainTextEdit::textUnderCursor() const
+{
+    QTextCursor tc = textCursor();
+    tc.select(QTextCursor::WordUnderCursor);
+    return tc.selectedText();
+}
+
+
 /*!
  * \brief PlainTextEdit::keyPressEvent
  * Reimplementation of keyPressEvent.
@@ -1399,6 +1459,8 @@ void PlainTextEdit::keyPressEvent(QKeyEvent *pEvent)
 {
   bool shiftModifier = pEvent->modifiers().testFlag(Qt::ShiftModifier);
   bool controlModifier = pEvent->modifiers().testFlag(Qt::ControlModifier);
+  bool isShortcut = (controlModifier && pEvent->key() == Qt::Key_Space); // CTRL+space
+
   if (pEvent->key() == Qt::Key_Escape) {
     if (mpBaseEditor->getFindReplaceWidget()->isVisible()) {
       mpBaseEditor->getFindReplaceWidget()->close();
@@ -1439,7 +1501,24 @@ void PlainTextEdit::keyPressEvent(QKeyEvent *pEvent)
     /* Ticket #2273. Change shift+enter to enter. */
     pEvent->setModifiers(Qt::NoModifier);
   }
-  QPlainTextEdit::keyPressEvent(pEvent);
+  /* do not change the order of execution as the indentation event will fail when completer is on */
+  if (c && c->popup()->isVisible()) {
+      // The following keys are forwarded by the completer to the widget
+     switch (pEvent->key()) {
+     case Qt::Key_Enter:
+     case Qt::Key_Return:
+     case Qt::Key_Escape:
+     case Qt::Key_Tab:
+     case Qt::Key_Backtab:
+          pEvent->ignore();
+          return; // let the completer do default behavior
+     default:
+         break;
+     }
+  }
+  if (!c || !isShortcut) // do not process the shortcut when we have a completer
+      QPlainTextEdit::keyPressEvent(pEvent);
+
   /* If user has pressed enter then a new line is inserted.
    * Indent the new line based on the indentation of previous line.
    */
@@ -1454,6 +1533,34 @@ void PlainTextEdit::keyPressEvent(QKeyEvent *pEvent)
     cursor.endEditBlock();
     setTextCursor(cursor);
   }
+
+
+  const bool ctrlOrShift = pEvent->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier);
+  if (!c || (ctrlOrShift && pEvent->text().isEmpty()))
+      return;
+
+  static QString eow("~!@#$%^&*()_+{}|:\"<>?,./;'[]\\-="); // end of word
+
+  bool hasModifier = (pEvent->modifiers() != Qt::NoModifier) && !ctrlOrShift;
+  QString completionPrefix = textUnderCursor();
+
+  if (!isShortcut && (hasModifier || pEvent->text().isEmpty()|| completionPrefix.length() < 3
+                      || eow.contains(pEvent->text().right(1)))) {
+      c->popup()->hide();
+      return;
+  }
+
+  if (completionPrefix != c->completionPrefix()) {
+      c->setCompletionPrefix(completionPrefix);
+      c->popup()->setCurrentIndex(c->completionModel()->index(0, 0));
+  }
+
+   //pop up the completer according to editor instance
+   mpBaseEditor->popupcompleter();
+
+   //QPlainTextEdit::keyPressEvent(pEvent);
+
+
 }
 
 /*!

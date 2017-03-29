@@ -42,6 +42,9 @@ class TextEditor : public BaseEditor
 public:
   TextEditor(QWidget *pParent);
   void setPlainText(const QString &text);
+  virtual void popupcompleter();
+private:
+  bool mForceSetPlainText;
 private slots:
   virtual void showContextMenu(QPoint point);
 public slots:

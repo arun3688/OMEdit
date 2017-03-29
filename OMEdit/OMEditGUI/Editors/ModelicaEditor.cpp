@@ -58,6 +58,12 @@ ModelicaEditor::ModelicaEditor(QWidget *pParent)
   mpDocumentMarker = new DocumentMarker(mpPlainTextEdit->document());
 }
 
+void ModelicaEditor::popupcompleter()
+{
+
+}
+
+
 /*!
  * \brief ModelicaEditor::getClassNames
  * Uses the OMC parseString API to check the class names inside the Modelica Text

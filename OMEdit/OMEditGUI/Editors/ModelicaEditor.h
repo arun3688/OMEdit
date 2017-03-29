@@ -57,6 +57,7 @@ public:
   QString getPlainText();
   void setTextChanged(bool changed) {mTextChanged = changed;}
   bool isTextChanged() {return mTextChanged;}
+  virtual void popupcompleter();
 private:
   QString mLastValidText;
   bool mTextChanged;
