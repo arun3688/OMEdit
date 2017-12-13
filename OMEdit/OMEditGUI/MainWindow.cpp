@@ -69,7 +69,7 @@
 #include "Traceability/TraceabilityQueryDialog.h"
 #include "Traceability/TraceabilityGraphViewWidget.h"
 #include "omc_config.h"
-
+#include <QtConcurrent/QtConcurrent>
 #include <QtSvg/QSvgGenerator>
 
 MainWindow::MainWindow(bool debug, QWidget *parent)
@@ -92,6 +92,14 @@ MainWindow::MainWindow(bool debug, QWidget *parent)
   qRegisterMetaTypeStreamOperators<FindTextOM>("FindTextOM");
   qRegisterMetaTypeStreamOperators<DebuggerConfiguration>("DebuggerConfiguration");
   /*! @note The above three lines registers the structs as QMetaObjects. Do not remove/move them. */
+
+  qRegisterMetaType<FileDetails>();
+  mSearch=new Search(this);
+  connect(mSearch,SIGNAL(updatelabel(int,QString,FileDetails)),this,SLOT(updatemainlabel(int,QString,FileDetails)));
+  connect(mSearch,SIGNAL(updateprogresslabeltotal(int)),this,SLOT(updatemainprogresslabeltotal(int)));
+  connect(mSearch,SIGNAL(updateprogresslabel(int)),this,SLOT(updatemainprogresslabel(int)));
+
+
   setObjectName("MainWindow");
   setWindowTitle(Helper::applicationName + " - "  + Helper::applicationIntroText);
   setWindowIcon(QIcon(":/Resources/icons/modeling.png"));
@@ -211,6 +219,73 @@ void MainWindow::setUpMainWindow()
   mpLibraryDockWidget->setWidget(mpLibraryWidget);
   addDockWidget(Qt::LeftDockWidgetArea, mpLibraryDockWidget);
   mpLibraryWidget->getLibraryTreeView()->setFocus(Qt::ActiveWindowFocusReason);
+
+
+  mpSearchDockWidget = new QDockWidget(tr("Search in Files"),this);
+  mpSearchDockWidget->setObjectName("Search");
+  // Labels
+  pSearchForLabel = new Label(tr("Search for:"));
+  Label * scopeLabel = new Label(tr("Scope:"));
+  Label * filepatternlabel = new Label(tr("File Pattern:"));
+  // Line Edits
+  pSearchForLineEdit = new QLineEdit;
+  pSearchForLineEdit->setFixedWidth(400);
+  pSearchForLineEdit->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+
+  // combo box
+  pSearchScopeComboBox = new QComboBox;
+  //pSearchScopeComboBox->setFixedWidth(100);
+  //pSearchScopeComboBox->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+  pSearchScopeComboBox->setModel(mpLibraryWidget->getLibraryTreeModel());
+
+  pSearchStringComboBox= createComboBox("");
+  pSearchPatternComboBox = createComboBox(tr("*"));
+
+  pSearchButton = new QPushButton("Search");
+  pSearchButton->setFixedWidth(50);
+  mptreeWidget = new QTreeWidget();
+  mptreeWidget->setColumnCount(1);
+  mptreeWidget->header()->close();
+  connect(mptreeWidget, SIGNAL(itemClicked(QTreeWidgetItem*, int)),this,   SLOT(checkclickitems(QTreeWidgetItem*,int)));
+
+
+  QWidget *firstPageWidget = new QWidget;
+  QWidget *secondPageWidget = new QWidget;
+  mpstackedWidget = new QStackedWidget;
+
+  QGridLayout * mSearchlayout = new QGridLayout;
+  mSearchlayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+  mSearchlayout->addWidget(scopeLabel,0,0);
+  mSearchlayout->addWidget(pSearchScopeComboBox,0,1);
+  mSearchlayout->addWidget(pSearchForLabel,1,0);
+  mSearchlayout->addWidget(pSearchStringComboBox,1,1);
+  mSearchlayout->addWidget(filepatternlabel,2,0);
+  mSearchlayout->addWidget(pSearchPatternComboBox,2,1);
+  mSearchlayout->addWidget(pSearchButton,3,1);
+  firstPageWidget->setLayout(mSearchlayout);
+  mpstackedWidget->addWidget(firstPageWidget);
+
+  QVBoxLayout * mSearchresults = new QVBoxLayout;
+  QPushButton *back = new QPushButton("Back");
+  back->setFixedWidth(50);
+  mSearchresults->addWidget(back);
+  mSearchresults->addWidget(mptreeWidget);
+  secondPageWidget->setLayout(mSearchresults);
+  mpstackedWidget->addWidget(secondPageWidget);
+
+
+  mpSearchDockWidget->setAllowedAreas(Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
+  mpSearchDockWidget->setWidget(mpstackedWidget);
+  addDockWidget(Qt::BottomDockWidgetArea, mpSearchDockWidget);
+  connect(pSearchButton, SIGNAL(clicked()), SLOT(searchInFiles()));
+  connect(back, SIGNAL(clicked()), SLOT(switchsearchpage()));
+
+  mpSearchDockWidget->show();
+
+  LibraryTreeModel *pLibraryTreeModel = mpLibraryWidget->getLibraryTreeModel();
+  //connect(pLibraryTreeModel, SIGNAL(rowsInserted(const QModelIndex &, int, int)),this,   SLOT(insertScopeItems(const QModelIndex &, int, int)));
+
+
   // create the GDB adapter instance
   GDBAdapter::create();
   // create stack frames widget
@@ -387,6 +462,172 @@ void MainWindow::setUpMainWindow()
   }
 }
 
+static void updateComboBox(QComboBox *comboBox)
+{
+    if (comboBox->findText(comboBox->currentText()) == -1)
+        comboBox->addItem(comboBox->currentText());
+}
+
+QComboBox * MainWindow::createComboBox(const QString &text)
+{
+    QComboBox *comboBox = new QComboBox;
+    comboBox->setEditable(true);
+    comboBox->addItem(text);
+    comboBox->setFixedWidth(400);
+    comboBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    return comboBox;
+}
+
+void MainWindow::switchsearchpage()
+{
+  mpstackedWidget->setCurrentIndex(0);
+  mptreeWidget->clear();
+}
+
+void MainWindow::checkclickitems(QTreeWidgetItem *item, int column)
+{
+  //qDebug() << "item clicked" << item->text(column) << column;
+  QVariant value = item->data(column,Qt::UserRole);
+  qDebug () << "check Qvariant value" << value.isNull()<< value;
+  if (!value.isNull())
+  {
+    FileDetails filedetails = qvariant_cast<FileDetails>(value);
+    QString line = QString::number(filedetails.Lines.firstKey());
+    qDebug() << "item_clicked_data" << filedetails.file <<line;
+    findFileAndGoToLine(filedetails.file,line);
+  }
+}
+
+void MainWindow::insertScopeItems(const QModelIndex &index, int first, int last)
+{
+  qDebug() << "insertscopeitems" << index.data(Qt::DisplayRole).toString();
+  QModelIndex sourceIndex = mpLibraryWidget->getLibraryTreeProxyModel()->mapToSource(index);
+  LibraryTreeItem *pLibraryTreeItem = static_cast<LibraryTreeItem*>(sourceIndex.internalPointer());
+  qDebug() << "insertscopeitems_end" << mpLibraryWidget->getLibraryTreeModel()->data(index,Qt::DisplayRole).toString();
+
+  //LibraryTreeItem *pLibraryTreeItem = pLibraryTreeModel->getRootLibraryTreeItem();
+
+  //QModelIndex sourceIndex = pLibraryTreeProxyModel->mapToSource(index);
+  //LibraryTreeItem *pLibraryTreeItem = static_cast<LibraryTreeItem*>(sourceIndex.internalPointer());
+  //qDebug() << "insertscopeitems_end" << pLibraryTreeModel->g
+   /*
+   QTreeView *pTreeView = qobject_cast<QTreeView*>(parent());
+
+   LibraryTreeProxyModel *pLibraryTreeProxyModel = qobject_cast<LibraryTreeProxyModel*>(pTreeView->model());
+   qDebug() << "insertscopeitems1";
+   QModelIndex sourceIndex = pLibraryTreeProxyModel->mapToSource(index);
+   qDebug() << "insertscopeitems2";
+   LibraryTreeItem *pLibraryTreeItem = static_cast<LibraryTreeItem*>(sourceIndex.internalPointer());
+   qDebug() << "insertscopeitems1" << pLibraryTreeItem->getName();*/
+}
+
+void MainWindow::updatemainlabel(int, QString, FileDetails filedetails)
+{
+  qDebug() << "updatemainlabel";
+  QTreeWidgetItem *mtreeWidgetItem = new QTreeWidgetItem();
+  mtreeWidgetItem->setText(0,filedetails.file);
+  mptreeWidget->insertTopLevelItem(0,mtreeWidgetItem);
+  mptreeWidget->resizeColumnToContents(0);
+  QMap<int, QString> map =filedetails.Lines;
+  QMap<int, QString>::iterator m;
+  for (m = map.begin(); m != map.end(); ++m)
+  {
+     // addTreeChild(mtreeWidgetItem,filedata[var].file,i.key(),i.value());
+      QTreeWidgetItem *mtreeItemchild = new QTreeWidgetItem();
+      QString finalstring=QString::number(m.key())+"  "+m.value();
+      mtreeItemchild->setText(0,finalstring);
+      QMap<int, QString> mapdata;
+      mapdata[m.key()]=m.value();
+      mtreeItemchild->setData(0,Qt::UserRole,QVariant::fromValue(FileDetails(filedetails.file,mapdata)));
+      mtreeWidgetItem->addChild(mtreeItemchild);
+  }
+}
+
+void MainWindow::updatemainprogresslabel(int)
+{
+
+}
+
+void MainWindow::updatemainprogresslabeltotal(int)
+{
+
+}
+
+void MainWindow::addTreeChild(QTreeWidgetItem *parent, QString filename, int line, QString name)
+{
+  QTreeWidgetItem *treeItem = new QTreeWidgetItem();
+  //treeItem->setText(0,QString::number(line));
+  QString finalstring=QString::number(line)+"  "+name;
+  QMap<int, QString> mapdata;
+  mapdata[line]=name;
+  treeItem->setText(0,finalstring);
+  treeItem->setData(0,Qt::UserRole,QVariant::fromValue(FileDetails(filename,mapdata)));
+  parent->addChild(treeItem);
+}
+
+void MainWindow::searchInFiles()
+{
+  qDebug() << "button clicked";
+  mpstackedWidget->setCurrentIndex(1);
+  updateComboBox(pSearchStringComboBox);
+  updateComboBox(pSearchPatternComboBox);
+  qDebug() << pSearchStringComboBox->currentText() << pSearchPatternComboBox->currentText();
+  //LibraryTreeModel *pLibraryTreeModel = mpLibraryWidget->getLibraryTreeModel();
+  //LibraryTreeView *ptreeview =mpLibraryWidget->getLibraryTreeView();
+  //LibraryTreeItem *ptree = ptreeview->getSelectedLibraryTreeItem();
+  //qDebug() << "row test" << pLibraryTreeModel->rowCount();
+  //connect(pLibraryTreeModel, SIGNAL(rowsAboutToBeInserted(const QModelIndex &, int, int)),this,   SLOT(insertScopeItems(const QModelIndex &, int, int)));
+
+  //QtConcurrent::run(this->mSearch,mSearch->run);
+  /*
+  LibraryTreeItem *pLibraryTreeItem = new LibraryTreeItem();
+  //qDebug() <<   mpModelWidgetContainer->getCurrentModelWidget()->getLibraryTreeItem()->getFileName();
+  LibraryTreeModel *pLibraryTreeModel = mpLibraryWidget->getLibraryTreeModel();
+  LibraryTreeItem *pitem = pLibraryTreeModel->getRootLibraryTreeItem();
+  qDebug() << "size" << pitem->childrenSize();
+  QStringList filelist;
+  QList<FileDetails> filedata;
+  QStringList pattern;
+  pattern << "*.mo";
+  for (int i = 0; i < pLibraryTreeModel->getRootLibraryTreeItem()->childrenSize(); ++i)
+  {
+     LibraryTreeItem *pLibraryTreeItem = pLibraryTreeModel->getRootLibraryTreeItem()->child(i);
+     //qDebug() << "inside loop" <<pLibraryTreeItem->getName() << pLibraryTreeItem->getFileName() << pLibraryTreeItem->childrenSize();
+     //QList<LibraryTreeItem *> item = pLibraryTreeItem->childrenItems();
+     //qDebug() << "inside recursion item" << item.length() << item[0]->childrenSize() << item[0]->getFileName();
+     QDirIterator it(pLibraryTreeItem->getFileName(),QStringList() << pattern, QDir::Files, QDirIterator::Subdirectories);
+     while (it.hasNext()) {
+         QFile f(it.next());
+         filelist.append(f.fileName());
+     }
+  }
+  qDebug() << "collected files" << filelist.size();
+  if(pSearchStringComboBox->currentText()!="")
+  {
+     filedata=findinFiles(filelist,pSearchStringComboBox->currentText());
+     for (int var = 0; var < filedata.length(); ++var) {
+       qDebug () << "inside filedata loop";
+       QTreeWidgetItem *mtreeWidgetItem = new QTreeWidgetItem();
+       mtreeWidgetItem->setText(0,filedata[var].file);
+       mptreeWidget->insertTopLevelItem(0,mtreeWidgetItem);
+       mptreeWidget->resizeColumnToContents(0);
+       QMap<int, QString> map =filedata[var].Lines;
+       QMap<int, QString>::iterator i;
+       for (i = map.begin(); i != map.end(); ++i)
+       {
+           addTreeChild(mtreeWidgetItem,filedata[var].file,i.key(),i.value());
+       }
+     }
+  }
+  */
+}
+
+FileDetails::FileDetails(QString filename, QMap<int,QString> Linenumbers)
+{
+  file=filename;
+  Lines=Linenumbers;
+}
+
 #if !defined(WITHOUT_OSG)
 /*!
  * \brief MainWindow::isThreeDViewerInitialized
@@ -397,6 +638,44 @@ bool MainWindow::isThreeDViewerInitialized()
 {
   return mpThreeDViewer ? true : false;
 }
+
+QList<FileDetails> MainWindow::findinFiles(const QStringList &files, const QString &text)
+{
+    QList<FileDetails> filedata;
+    QStringList foundFiles;
+    for (int i = 0; i < files.size(); ++i) {
+        const QString fileName = files.at(i);
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly))
+        {
+            QString line;
+            QStringList foundLines;
+            QMap<int,QString> linecounts;
+            QTextStream in(&file);
+            int linenumber = 0;
+            int flag=1;
+            while (!in.atEnd()) {
+                line = in.readLine();
+                linenumber+=1;
+                if (line.contains(text, Qt::CaseInsensitive)) {
+                    if(flag==1)
+                    {
+                       foundFiles << files[i];
+                    }
+                    foundLines << line;
+                    linecounts[linenumber].append(line);
+                    //break;
+                }
+                flag=0;
+
+            }
+            qDebug () << "linescount" << linecounts;
+            filedata << FileDetails(files[i],linecounts);
+        }
+    }
+    return filedata;
+}
+
 
 /*!
  * \brief MainWindow::getThreeDViewer
@@ -3845,3 +4124,74 @@ AboutOMEditDialog::AboutOMEditDialog(MainWindow *pMainWindow)
   pMainLayout->addWidget(pCloseButton, 1, 0, 1, 2, Qt::AlignRight);
   setLayout(pMainLayout);
 }
+
+
+Search::Search(QObject *parent):
+  QObject(parent)
+{
+
+}
+
+void Search::start()
+{
+
+  for (int i=0; i<100000;++i)
+  {
+    qDebug() << "start" << QThread::currentThreadId();
+    //emit updatelabel(i,"arun");
+    //this->msleep(100);
+    QThread::msleep(5);
+
+  }
+
+}
+
+
+void Search::run()
+{
+   qDebug()<< "inside run" << topdirname;
+
+   topdirname="C:/OPENMODELICAGIT/OpenModelica/OMCompiler/";
+   QString text = "record EQ_CONNECT";
+   QStringList filelist;
+   QStringList pattern;
+   pattern << "*.cpp" << "*.h" << "*.mo";
+   QDirIterator it(topdirname,QStringList() << pattern,QDir::Files,QDirIterator::Subdirectories);
+   while (it.hasNext()) {
+       QFile f(it.next());
+       filelist.append(f.fileName());
+   }
+   emit updateprogresslabeltotal(filelist.size());
+   for (int i = 0; i < filelist.size(); ++i) {
+       QString fileName = filelist.at(i);
+       QFile file(fileName);
+       emit updateprogresslabel(i);
+       if (file.open(QIODevice::ReadOnly)) {
+           QString line;
+           QStringList foundLines;
+           QMap<int,QString> linecounts;
+           QTextStream in(&file);
+           int linenumber = 0;
+           bool value=false;
+           while (!in.atEnd()) {
+               line = in.readLine();
+               linenumber+=1;
+               if (line.contains(text, Qt::CaseInsensitive))
+               {
+                   foundLines << line;
+                   linecounts[linenumber].append(line);
+                   //break;
+                   value=true;
+               }
+           }
+           if(value==true)
+           {
+             emit updatelabel(i,fileName,FileDetails(fileName,linecounts));
+
+           }
+       }
+   }
+
+}
+
+

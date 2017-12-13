@@ -51,7 +51,9 @@
 #include <QToolButton>
 #include <QMdiSubWindow>
 #include <QMdiArea>
-
+#include <QLineEdit>
+#include <QComboBox>
+#include <QTreeWidget>
 
 class OMCProxy;
 class TransformationsWidget;
@@ -64,6 +66,8 @@ class GDBLoggerWidget;
 class DocumentationWidget;
 class PlotWindowContainer;
 class VariablesWidget;
+class FileDetails;
+class Search;
 #if !defined(WITHOUT_OSG)
 class ThreeDViewer;
 #endif
@@ -94,6 +98,9 @@ private:
 public:
   static MainWindow *instance(bool debug = false);
   void setUpMainWindow();
+  QList<FileDetails> findinFiles(const QStringList &files, const QString &text);
+  QComboBox *createComboBox(const QString &text);
+  void addTreeChild(QTreeWidgetItem *parent, QString filepath, int line , QString name);
   bool isDebug() {return mDebug;}
   OMCProxy* getOMCProxy() {return mpOMCProxy;}
   void setExitApplicationStatus(bool status) {mExitApplicationStatus = status;}
@@ -110,7 +117,12 @@ public:
   PlotWindowContainer* getPlotWindowContainer() {return mpPlotWindowContainer;}
   VariablesWidget* getVariablesWidget() {return mpVariablesWidget;}
   QDockWidget* getVariablesDockWidget() {return mpVariablesDockWidget;}
-
+  Label * pSearchForLabel;
+  QLineEdit * pSearchForLineEdit;
+  QPushButton * pSearchButton;
+  QComboBox * pSearchScopeComboBox;
+  QComboBox * pSearchStringComboBox;
+  QComboBox * pSearchPatternComboBox;
 #if !defined(WITHOUT_OSG)
   bool isThreeDViewerInitialized();
   ThreeDViewer* getThreeDViewer();
@@ -215,10 +227,14 @@ public:
                                    const char* curveStyle, const char* legendPosition, const char* footer, const char* autoScale,
                                    const char* variables);
 private:
+  Search *mSearch;
   bool mDebug;
   OMCProxy *mpOMCProxy;
   bool mExitApplicationStatus;
   QDockWidget *mpMessagesDockWidget;
+  QDockWidget *mpSearchDockWidget;
+  QTreeWidget *mptreeWidget;
+  QStackedWidget *mpstackedWidget;
   FileDataNotifier *mpOutputFileDataNotifier;
   FileDataNotifier *mpErrorFileDataNotifier;
   LibraryWidget *mpLibraryWidget;
@@ -258,6 +274,8 @@ private:
   QStatusBar *mpStatusBar;
   QTimer *mpAutoSaveTimer;
   // File Menu
+  //Modelica Search Action
+  QAction *mpSearchFileAction;
   // Modelica File Actions
   QAction *mpNewModelicaClassAction;
   QAction *mpOpenModelicaFileAction;
@@ -463,6 +481,13 @@ public slots:
   void toggleAutoSave();
   void readInterfaceData(LibraryTreeItem *pLibraryTreeItem);
   void enableReSimulationToolbar(bool visible);
+  void searchInFiles();
+  void switchsearchpage();
+  void checkclickitems(QTreeWidgetItem *item, int column);
+  void insertScopeItems(const QModelIndex &parent, int first, int last);
+  void updatemainlabel(int,QString,FileDetails);
+  void updatemainprogresslabel(int);
+  void updatemainprogresslabeltotal(int);
 private slots:
   void perspectiveTabChanged(int tabIndex);
   void documentationDockWidgetVisibilityChanged(bool visible);
@@ -498,6 +523,33 @@ protected:
   virtual void dragEnterEvent(QDragEnterEvent *event);
   virtual void dragMoveEvent(QDragMoveEvent *event);
   virtual void dropEvent(QDropEvent *event);
+};
+
+
+class FileDetails
+{
+public:
+  FileDetails() {}
+  FileDetails(QString filename, QMap<int,QString> Linenumbers);
+  QString file;
+  QMap<int,QString> Lines;
+};
+
+Q_DECLARE_METATYPE(FileDetails)
+
+class Search : public QObject
+{
+  Q_OBJECT
+public:
+  explicit Search(QObject * parent = 0);
+  void start();
+  void run();
+  bool stop=false;
+  QString topdirname="";
+ signals:
+    void updatelabel(int,QString,FileDetails);
+    void updateprogresslabel(int);
+    void updateprogresslabeltotal(int);
 };
 
 class AboutOMEditDialog : public QDialog

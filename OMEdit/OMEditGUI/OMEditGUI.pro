@@ -28,7 +28,7 @@
  #
  #/
 
-QT += network core gui webkit xml xmlpatterns svg opengl
+QT += network core gui webkit xml xmlpatterns svg opengl concurrent
 greaterThan(QT_MAJOR_VERSION, 4) {
   QT += printsupport widgets webkitwidgets opengl
 }
